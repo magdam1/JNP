@@ -1,2 +1,2 @@
 # JNP
-Misc / C++
+General projects / C++
