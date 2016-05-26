@@ -1,0 +1,344 @@
+#ifndef FUNCTION_MAXIMA_H_
+#define FUNCTION_MAXIMA_H_
+
+#include <set>
+#include <memory>
+
+struct InvalidArg: std::exception {
+		virtual const char* what() const throw () {
+			return "InvalidArg";
+		}
+} InvalidArga;
+
+template<typename A, typename V> class FunctionMaxima {
+
+		/*
+		 * Nested classes:
+		 */
+	public:
+		class point_type {
+
+			public:
+				A const& arg() const {
+					return *a;
+				}
+				
+				V const& value() const {
+					return *v;
+				}
+				
+				point_type(point_type const& pt) {
+					a = std::make_shared(pt.arg()); //Czy make_shared różni się czymkolwiek od konstruktora?
+					v = std::make_shared(pt.value());
+				}
+				
+				point_type& operator=(point_type const& pt) {
+					a = std::make_shared(pt.arg());
+					v = std::make_shared(pt.value());
+				}
+				
+				bool operator==(point_type const& pt) const {
+					return ((pt.arg()) == a 
+							&& (pt.value() == v));
+				}
+				
+				bool operator!=(point_type const& pt) const {
+					return ((pt.arg() != a)
+							|| (pt.value() != v));
+				}
+
+			private:
+				point_type(A const& argu, V const& valu) {
+					a = std::make_shared(argu);
+					v = std::make_shared(valu);
+				}
+				
+				point_type(point_type const& * pt) : point_type(*pt) {
+				  
+				}
+
+				std::shared_ptr<A> a;
+				std::shared_ptr<V> v;
+		};
+
+		class iterator : std::interator<std::bidirectional_iterator_tag, point_type> { //EXCEPTIONS!!!
+				// bidirectional_iterator po punktach funkcji
+			public:
+				iterator() {
+				
+				}
+				iterator(point_type const& * pt) : p(pt) {
+				  
+				}
+				
+				iterator(iterator const& it) : p(it.p) {
+				
+				}
+				
+				//Wyjście poza zakres
+				iterator& operator++() {
+				  ++p;
+				  return *this;
+				}
+				
+				iterator operator++(point_type) { //??
+				  iterator tmp(*this);
+				  operator++();
+				  return tmp;
+				}
+				
+				iterator& operator--() {
+				  --p;
+				  return *this;
+				}
+				
+				iterator operator--(point_type) { //??
+				  iterator tmp(*this);
+				  operator--();
+				  return tmp;
+				}
+				
+				bool operator==(iterator const& it) const {
+					return (p == it.p)
+				}
+				
+				bool operator!=(iterator const& it) const {
+					return (p != it.p)
+				}
+				
+				iterator& operator=(iterator const& it) {
+					p = it.p;
+					return *this;
+				}
+				
+				point_type& operator->() {
+					return *p;
+				}
+				
+				point_type& operator*() {
+					return *p;
+				}
+			
+		
+			private:
+				point_type const& * p;
+		};
+
+		class mx_iterator {
+				// bidirectional_iterator po lokalnych maksimach funkcji
+		};
+
+		/*
+		 * FunctionMaxima class itself:
+		 */
+	private:
+		//typedef std::shared_ptr<const point_type> ptr_const_point;
+
+		/*
+		 * Compare points by values then by args
+		 * strong guarantee
+		 */
+		struct comp_values {
+				bool operator()(point_type const& p1,
+						point_type const& p2) const {
+					if (!(p1.value() < p2.value())
+							&& !(p1.value() < p2.value())) {
+						return (p2.arg() < p1.arg());
+					}
+					else {
+						return (p2.value() < p1.value());
+					}
+
+				}
+		};
+
+		/*
+		 * Compare points by args
+		 * strong guarantee
+		 */
+		struct comp_args {
+				bool operator()(point_type const& p1,
+						point_type const& p2) const {
+					return (p1.arg() < p2.arg());
+				}
+		};
+
+		// keeps function args and values
+		std::set<point_type, comp_args> fun;
+
+		// keeps local max
+		std::set<point_type, comp_values> lmax;
+
+		enum class WhatToDo {
+			ADD, DELETE, NOTHING
+		};
+
+	public:
+		typedef typename std::set<point_type, comp_args> function;
+		typedef typename std::set<point_type, comp_args>::size_type size_type;
+
+		FunctionMaxima() {
+			// MB: według mnie tu nic nie musi być
+		}
+
+		FunctionMaxima(FunctionMaxima<A, V> const& old) = default;
+
+		FunctionMaxima& operator=(FunctionMaxima<A, V> const& old) {
+			if (this != &old) {
+				std::set<point_type, comp_args> pfun(old.fun);
+				fun.swap(pfun);
+				std::set<point_type, comp_values> plmax(old.lmax);
+				lmax.swap(plmax);
+			}
+
+			return *this;
+		}
+
+		/*
+		 * strong guarantee
+		 */
+		V const& value_at(A const& a) const {
+
+			const auto it = fun.find(point_type(a));
+			if (it == fun.end()) {
+				throw InvalidArga;
+			}
+
+			return it->value();
+		}
+
+		void set_value(A const& a, V const& v) {
+
+		}
+
+		/*
+		 * strong guarantee
+		 */
+		void erase(A const& a) {
+			/*
+			 * strong guarantee section:
+			 */
+			point_type point(a);
+			const auto itf_a = fun.find(point);
+			if (itf_a == fun.end()) { // there's no arg a
+				return;
+			}
+			// it_f != end():
+
+			WhatToDo todo_prev = WhatToDo::NOTHING;
+			WhatToDo todo_next = WhatToDo::NOTHING;
+
+			const auto itf_prev =
+					(itf_a == fun.begin()) ? fun.end() : (itf_a - 1);
+			const auto itf_next =
+					(itf_a + 1 == fun.end()) ? fun.end() : (itf_a + 1);
+			const auto itl_a = lmax.find(point);
+			const auto itl_prev =
+					(itf_prev == fun.end()) ? lmax.end() : lmax.find(*itf_prev);
+			const auto itl_next =
+					(itf_next == fun.end()) ? lmax.end() : lmax.find(*itf_next);
+
+			// previous may be max :
+			if (itf_prev != fun.end()) {
+				const auto itf_prev2 =
+						(itf_prev == fun.begin()) ? fun.end() : (itf_prev - 1);
+				if (((itf_prev == fun.begin())
+						|| (!(itf_prev->value() < itf_prev2->value())))
+						&& ((itf_prev == fun.end() - 2)
+								|| (!(itf_prev->value() < itf_next->value())))) {
+					todo_prev = WhatToDo::ADD;
+				}
+				else if (lmax.find(*itf_prev) != lmax.end()) {
+					todo_prev = WhatToDo::DELETE;
+				}
+
+			}
+
+			// next may be max:
+			if (itf_next != fun.end()) {
+				const auto itf_next2 =
+						(itf_next == fun.end() - 1) ?
+								fun.end() : (itf_next + 1);
+				if (((itf_next == fun.begin() + 1)
+						|| (!(itf_next->value() < itf_prev->value())))
+						&& ((itf_next == fun.end() - 1)
+								|| (!(itf_next->value() < itf_next2->value())))) {
+					todo_next = WhatToDo::ADD;
+				}
+				else if (lmax.find(*itf_next) != lmax.end()) {
+					todo_next = WhatToDo::DELETE;
+				}
+			}
+
+			/*
+			 * section that requires rollback if insert fails:
+			 */
+			std::pair<typename std::set<point_type, comp_values>::iterator, bool> result;
+
+			if (todo_prev == WhatToDo::ADD) {
+				result = lmax.insert(*itf_prev);
+			}
+
+			if (todo_next == WhatToDo::ADD) {
+				try {
+					lmax.insert(*itf_next);
+				}
+				catch (...) {
+					if (todo_prev == WhatToDo::ADD && result.second) {
+						lmax.erase(result.first); // no-throw
+					}
+				}
+
+			}
+
+			/*
+			 * no-throw section:
+			 */
+			fun.erase(itf_a);
+			if (itl_a != lmax.end()) {
+				lmax.erase(itl_a);
+			}
+			if (todo_prev == WhatToDo::DELETE) {
+				lmax.erase(itl_prev);
+			}
+			if (todo_next == WhatToDo::DELETE) {
+				lmax.erase(itl_next);
+			}
+
+		}
+		
+		iterator begin() const {
+			function::iterator it = fun.begin();
+			return iterator(*it);
+		}
+
+		iterator end() const {
+			function::iterator it = fun.end();
+			return iterator(*it);
+		}
+
+		iterator find(A const& a) const {
+			function::iterator it, tmp = fun.begin();
+			while (tmp != fun.end()) { 
+				it = tmp;
+				tmp = (*it.arg() == a ? tmp + 1 : fun.end());
+			}
+			iterator res = (*it.arg() == a ? iterator(*it) : this.end());
+			return res;
+		}
+
+		mx_iterator mx_begin() const {
+
+		}
+
+		mx_iterator mx_end() const {
+
+		}
+
+		size_type size() const {
+			return fun.size();
+		}
+
+};
+
+#endif
